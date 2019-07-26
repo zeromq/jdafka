@@ -355,13 +355,11 @@ public class DafkaConsumer extends SimpleActor
 
         final DafkaConsumer dafkaConsumer = new DafkaConsumer();
         ZActor actor = new ZActor(context, dafkaConsumer, null, Arrays.asList(consumerProperties).toArray());
+        // Wait until actor is ready
         Socket pipe = actor.pipe();
         byte[] signal = pipe.recv();
         assert signal[0] == 0;
-        Thread.sleep(3000);
-
         dafkaConsumer.subscribe("HELLO");
-        Thread.sleep(1000);
 
         final Thread zmqThread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
