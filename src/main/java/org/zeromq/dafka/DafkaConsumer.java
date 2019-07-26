@@ -35,7 +35,7 @@ import static org.zeromq.ZActor.SimpleActor;
 public class DafkaConsumer extends SimpleActor
 {
 
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(DafkaConsumer.class);
 
     private Socket      consumerSub;
     private Socket      consumerPub;
@@ -229,7 +229,7 @@ public class DafkaConsumer extends SimpleActor
                 sendConsumerHelloMsg(storeAddress);
                 break;
             default:
-                log.warn("Unkown message type {}", id);
+                log.warn("Unknown message type {}", id);
                 return true;     // Unexpected message id
             }
         }

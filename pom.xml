@@ -23,6 +23,7 @@
                 <artifactId>maven-shade-plugin</artifactId>
                 <executions>
                     <execution>
+                        <id>Console Consumer</id>
                         <goals>
                             <goal>shade</goal>
                         </goals>
@@ -32,6 +33,21 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>org.zeromq.dafka.DafkaConsumer</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>Console Producer</id>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <outputFile>${project.build.directory}/jdafka_console_producer.jar</outputFile>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>org.zeromq.dafka.DafkaProducer</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>
