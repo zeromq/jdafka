@@ -8,6 +8,7 @@ import org.zeromq.ZContext;
 import org.zeromq.ZFrame;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Socket;
+import org.zeromq.ZMsg;
 import org.zeromq.ZPoller;
 import org.zproto.DafkaProto;
 
@@ -31,18 +32,22 @@ public class DafkaConsumer extends SimpleActor
     private ZActor      beaconActor;
 
     private final DafkaProto fetchMsg;
+    private final DafkaProto getHeadsMsg;
+    private final DafkaProto helloMsg;
 
     private final Map<String, Long> sequenceIndex;
     private final List<String>      topics;
 
-    private final boolean resetLatest;
+    private boolean resetLatest;
 
     public DafkaConsumer()
     {
-        this.fetchMsg = new DafkaProto('F');
+        this.fetchMsg = new DafkaProto(DafkaProto.FETCH);
+        this.getHeadsMsg = new DafkaProto(DafkaProto.GET_HEADS);
+        this.helloMsg = new DafkaProto(DafkaProto.CONSUMER_HELLO);
         this.sequenceIndex = new HashMap<>();
         this.topics = new ArrayList<>();
-        this.resetLatest = false;
+        this.resetLatest = true;
         this.beacon = new DafkaBeacon();
     }
 
@@ -70,10 +75,12 @@ public class DafkaConsumer extends SimpleActor
         assert rc == true;
 
         fetchMsg.setAddress(consumerAddress);
+        getHeadsMsg.setAddress(consumerAddress);
+        helloMsg.setAddress(consumerAddress);
 
         DafkaProto.subscribe(consumerSub, DafkaProto.DIRECT_MSG, consumerAddress);
         DafkaProto.subscribe(consumerSub, DafkaProto.DIRECT_HEAD, consumerAddress);
-        //DafkaProto.subscribe(consumerSub, DafkaProto.STORE_HELLO, consumerAddress);
+        DafkaProto.subscribe(consumerSub, DafkaProto.STORE_HELLO, consumerAddress);
 
         rc = poller.register(consumerSub, ZPoller.IN);
         pipe.send(new byte[] { 0 });
@@ -197,11 +204,28 @@ public class DafkaConsumer extends SimpleActor
                 if (!lastSequenceKnown || currentSequence > lastKnownSequence) {
                     sendFetch(address, subject, currentSequence, lastKnownSequence);
                 }
-
                 break;
+            case DafkaProto.STORE_HELLO:
+                String storeAddress = consumerMsg.address();
+
+                log.info("Consumer: Consumer is connected to store {}", storeAddress);
+
+                sendConsumerHelloMsg(storeAddress);
+                break;
+            default:
+                log.warn("Unkown message type {}", id);
+                return true;     // Unexpected message id
             }
         }
         return true;
+    }
+
+    private void sendGetHeadsMsg(final String topic)
+    {
+        log.debug("Consumer: Send EARLIEST message for topic {}", topic);
+
+        getHeadsMsg.setTopic(topic);
+        getHeadsMsg.send(consumerPub);
     }
 
     private void sendFetch(String address, String subject, long currentSequence, Long lastKnownSequence)
@@ -219,6 +243,22 @@ public class DafkaConsumer extends SimpleActor
         fetchMsg.setSequence(lastKnownSequence + 1);
         fetchMsg.setCount(noOfMissedMessages);
         fetchMsg.send(consumerPub);
+    }
+
+    private void sendConsumerHelloMsg(String storeAddress)
+    {
+        List<String> topics;
+
+        if (!this.resetLatest) {
+            topics = new ArrayList<>(this.topics);
+        }
+        else {
+            topics = new ArrayList<>();
+        }
+
+        this.helloMsg.setSubjects(topics);
+        this.helloMsg.setTopic(storeAddress);
+        this.helloMsg.send(this.consumerPub);
     }
 
     @Override
@@ -239,6 +279,11 @@ public class DafkaConsumer extends SimpleActor
         log.debug("Subscribe to topic {}", topic);
         DafkaProto.subscribe(consumerSub, DafkaProto.MSG, topic);
         DafkaProto.subscribe(consumerSub, DafkaProto.HEAD, topic);
+
+        if (!this.resetLatest) {
+            sendGetHeadsMsg(topic);
+        }
+
         topics.add(topic);
     }
 

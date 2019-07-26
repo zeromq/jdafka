@@ -54,11 +54,20 @@ Topic is the address of the producer.
 
     GET_HEADS -
         address             string
+
+    CONSUMER_HELLO -
+        address             string
+        subjects            strings
+
+    STORE_HELLO -
+        address             string
 */
 
 package org.zproto;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.zeromq.SocketType;
 import org.zeromq.ZFrame;
@@ -76,6 +85,8 @@ public class DafkaProto implements java.lang.AutoCloseable
     public static final char HEAD                 = 'H';
     public static final char DIRECT_HEAD          = 'E';
     public static final char GET_HEADS            = 'G';
+    public static final char CONSUMER_HELLO       = 'W';
+    public static final char STORE_HELLO          = 'L';
 
     //  Structure of our class
     private ZFrame routingId;           // Routing_id from ROUTER, if any
@@ -89,6 +100,7 @@ public class DafkaProto implements java.lang.AutoCloseable
     private long sequence;
     private ZFrame content;
     private long count;
+    private List <String> subjects;
 
     public DafkaProto(char id)
     {
@@ -345,6 +357,24 @@ public class DafkaProto implements java.lang.AutoCloseable
                 }
                 break;
 
+            case CONSUMER_HELLO:
+                {
+                self.address = self.getString ();
+                listSize = (int) self.getNumber4 ();
+                self.subjects = new ArrayList<String> ();
+                while (listSize-- > 0) {
+                    String string = self.getLongString ();
+                    self.subjects.add (string);
+                }
+                }
+                break;
+
+            case STORE_HELLO:
+                {
+                self.address = self.getString ();
+                }
+                break;
+
             default:
                 throw new IllegalArgumentException ();
             }
@@ -462,6 +492,30 @@ public class DafkaProto implements java.lang.AutoCloseable
             }
             break;
 
+        case CONSUMER_HELLO:
+            {
+            //  address is a string with 1-byte length
+            frameSize ++;
+            frameSize += (address != null) ? address.getBytes(ZMQ.CHARSET).length : 0;
+            //  subjects is an array of strings
+            frameSize += 4;
+            if (subjects != null) {
+                for (String value : subjects) {
+                    frameSize += 4;
+                    frameSize += value.length ();
+                }
+            }
+            }
+            break;
+
+        case STORE_HELLO:
+            {
+            //  address is a string with 1-byte length
+            frameSize ++;
+            frameSize += (address != null) ? address.getBytes(ZMQ.CHARSET).length : 0;
+            }
+            break;
+
         default:
             System.out.printf ("E: bad message type '%d', not sent\n", id);
             assert (false);
@@ -557,6 +611,32 @@ public class DafkaProto implements java.lang.AutoCloseable
             break;
 
         case GET_HEADS:
+            {
+            if (address != null)
+                putString (address);
+            else
+                putNumber1 ((byte) 0);      //  Empty string
+            }
+            break;
+
+        case CONSUMER_HELLO:
+            {
+            if (address != null)
+                putString (address);
+            else
+                putNumber1 ((byte) 0);      //  Empty string
+            if (subjects != null) {
+                putNumber4 (subjects.size ());
+                for (String value : subjects) {
+                    putLongString (value);
+                }
+            }
+            else
+                putNumber4 (0);      //  Empty string array
+            }
+            break;
+
+        case STORE_HELLO:
             {
             if (address != null)
                 putString (address);
@@ -863,6 +943,70 @@ public class DafkaProto implements java.lang.AutoCloseable
         self.send (output);
     }
 
+//  --------------------------------------------------------------------------
+//  Send the CONSUMER_HELLO to the socket in one step
+
+    public static void sendConsumer_Hello (
+        Socket output,
+        String address,
+        List <String> subjects)
+    {
+	sendConsumer_Hello (
+		    output,
+		    null,
+		    address,
+		    subjects);
+    }
+
+//  --------------------------------------------------------------------------
+//  Send the CONSUMER_HELLO to a router socket in one step
+
+    public static void sendConsumer_Hello (
+        Socket output,
+	ZFrame routingId,
+        String address,
+        List <String> subjects)
+    {
+        DafkaProto self = new DafkaProto (DafkaProto.CONSUMER_HELLO);
+        if (routingId != null)
+        {
+	        self.setRoutingId (routingId);
+        }
+        self.setAddress (address);
+        self.setSubjects (new ArrayList <String> (subjects));
+        self.send (output);
+    }
+
+//  --------------------------------------------------------------------------
+//  Send the STORE_HELLO to the socket in one step
+
+    public static void sendStore_Hello (
+        Socket output,
+        String address)
+    {
+	sendStore_Hello (
+		    output,
+		    null,
+		    address);
+    }
+
+//  --------------------------------------------------------------------------
+//  Send the STORE_HELLO to a router socket in one step
+
+    public static void sendStore_Hello (
+        Socket output,
+	ZFrame routingId,
+        String address)
+    {
+        DafkaProto self = new DafkaProto (DafkaProto.STORE_HELLO);
+        if (routingId != null)
+        {
+	        self.setRoutingId (routingId);
+        }
+        self.setAddress (address);
+        self.send (output);
+    }
+
 
     //  --------------------------------------------------------------------------
     //  Duplicate the DafkaProto message
@@ -918,6 +1062,17 @@ public class DafkaProto implements java.lang.AutoCloseable
         }
         break;
         case GET_HEADS:
+            {
+            copy.address = this.address;
+        }
+        break;
+        case CONSUMER_HELLO:
+            {
+            copy.address = this.address;
+            copy.subjects = new ArrayList <String> (this.subjects);
+        }
+        break;
+        case STORE_HELLO:
             {
             copy.address = this.address;
         }
@@ -1067,6 +1222,35 @@ public class DafkaProto implements java.lang.AutoCloseable
             }
             break;
 
+        case CONSUMER_HELLO:
+            {
+            System.out.println ("CONSUMER_HELLO:");
+            System.out.printf ("    topic=%s\n", topic);
+            if (address != null)
+                System.out.printf ("    address='%s'\n", address);
+            else
+                System.out.printf ("    address=\n");
+            System.out.printf ("    subjects={");
+            if (subjects != null) {
+                for (String value : subjects) {
+                    System.out.printf (" '%s'", value);
+                }
+            }
+            System.out.printf (" }\n");
+            }
+            break;
+
+        case STORE_HELLO:
+            {
+            System.out.println ("STORE_HELLO:");
+            System.out.printf ("    topic=%s\n", topic);
+            if (address != null)
+                System.out.printf ("    address='%s'\n", address);
+            else
+                System.out.printf ("    address=\n");
+            }
+            break;
+
         }
     }
 
@@ -1171,6 +1355,31 @@ public class DafkaProto implements java.lang.AutoCloseable
     public void setCount (long count)
     {
         this.count = count;
+    }
+
+
+    //  --------------------------------------------------------------------------
+    //  Iterate through the subjects field, and append a subjects value
+
+    public List<String> subjects()
+    {
+        return subjects;
+    }
+
+    public void appendSubjects (String format, Object ... args)
+    {
+        //  Format into newly allocated string
+
+        String string = String.format (format, args);
+        //  Attach string to list
+        if (subjects == null)
+            subjects = new ArrayList<String>();
+        subjects.add (string);
+    }
+
+    public void setSubjects (List <String> value)
+    {
+        subjects = new ArrayList (value);
     }
 
 

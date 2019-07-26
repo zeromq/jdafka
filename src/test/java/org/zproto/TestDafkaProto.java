@@ -151,6 +151,37 @@ public class TestDafkaProto
         assertEquals (self.address (), "Life is short but Now lasts for ever");
         self.destroy ();
 
+        self = new DafkaProto (DafkaProto.CONSUMER_HELLO);
+        self.setTopic ("HELLO");
+        self.subscribe(input, DafkaProto.CONSUMER_HELLO, "HELLO");
+        Thread.sleep(100);  //  Give time for subscription to become valid
+        self.setAddress ("Life is short but Now lasts for ever");
+        self.appendSubjects ("Name: %s", "Brutus");
+        self.appendSubjects ("Age: %d", 43);
+        self.send (output);
+
+        self = DafkaProto.recv (input);
+        assert (self != null);
+        assertEquals(self.topic(), "HELLO");
+        assertEquals (self.address (), "Life is short but Now lasts for ever");
+        assertEquals (self.subjects ().size (), 2);
+        assertEquals (self.subjects ().get (0), "Name: Brutus");
+        assertEquals (self.subjects ().get (1), "Age: 43");
+        self.destroy ();
+
+        self = new DafkaProto (DafkaProto.STORE_HELLO);
+        self.setTopic ("HELLO");
+        self.subscribe(input, DafkaProto.STORE_HELLO, "HELLO");
+        Thread.sleep(100);  //  Give time for subscription to become valid
+        self.setAddress ("Life is short but Now lasts for ever");
+        self.send (output);
+
+        self = DafkaProto.recv (input);
+        assert (self != null);
+        assertEquals(self.topic(), "HELLO");
+        assertEquals (self.address (), "Life is short but Now lasts for ever");
+        self.destroy ();
+
         ctx.destroy ();
         System.out.printf ("OK\n");
     }
