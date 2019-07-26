@@ -363,19 +363,37 @@ public class DafkaConsumer extends SimpleActor
         dafkaConsumer.subscribe("HELLO");
         Thread.sleep(1000);
 
-        while (!context.isClosed()) {
-            ZMsg msg = actor.recv();
-            String subject = msg.popString();
-            String address = msg.popString();
-            String content = msg.popString();
+        final Thread zmqThread = new Thread(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                ZMsg msg = actor.recv(100);
+                if (msg != null) {
+                    String subject = msg.popString();
+                    String address = msg.popString();
+                    String content = msg.popString();
 
-            System.out.println(subject);
-            System.out.println(address);
-            System.out.println(content);
-        }
+                    System.out.println(subject);
+                    System.out.println(address);
+                    System.out.println(content);
+                }
+            }
 
-        boolean rc = actor.sign();
-        assert (rc);
-        dafkaConsumer.terminate(actor);
+            System.out.println("KILL ME!!");
+            boolean rc = actor.sign();
+            assert (rc);
+            dafkaConsumer.terminate(actor);
+        });
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Interrupted! Killing dafka console consumer.");
+            context.close();
+            try {
+                zmqThread.interrupt();
+                zmqThread.join();
+            }
+            catch (InterruptedException e) {
+            }
+        }));
+
+        zmqThread.start();
     }
 }
