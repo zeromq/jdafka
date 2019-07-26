@@ -1,7 +1,10 @@
 package org.zeromq.dafka;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.zeromq.SocketType;
 import org.zeromq.ZActor;
 import org.zeromq.ZActor.SimpleActor;
@@ -16,6 +19,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 
 import static org.zeromq.ZMQ.Socket;
 import static org.zeromq.ZTimer.Timer;
@@ -23,7 +27,7 @@ import static org.zeromq.ZTimer.Timer;
 public class DafkaBeacon extends SimpleActor
 {
 
-    private static final Logger log = LogManager.getLogger();
+    private static final Logger log = LogManager.getLogger(DafkaBeacon.class);
 
     private Thread  timerThread;
     private boolean timerThreadRunning;
@@ -70,6 +74,16 @@ public class DafkaBeacon extends SimpleActor
     @Override
     public List<Socket> createSockets(ZContext ctx, Object... args)
     {
+        Properties properties = (Properties) args[0];
+        String towerPubAddress = properties.getProperty("beacon.pub_address");
+        if (StringUtils.isNoneBlank(towerPubAddress)) {
+            this.towerPubAddress = towerPubAddress;
+        }
+        String towerSubAddress = properties.getProperty("beacon.sub_address");
+        if (StringUtils.isNoneBlank(towerSubAddress)) {
+            this.towerSubAddress = towerSubAddress;
+        }
+
         // Creating publisher socket
         this.pub = ctx.createSocket(SocketType.PUB);
 

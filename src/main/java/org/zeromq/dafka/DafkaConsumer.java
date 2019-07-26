@@ -1,7 +1,17 @@
 package org.zeromq.dafka;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.UnrecognizedOptionException;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.zeromq.SocketType;
 import org.zeromq.ZActor;
 import org.zeromq.ZContext;
@@ -17,6 +27,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
 
 import static org.zeromq.ZActor.SimpleActor;
@@ -54,7 +65,12 @@ public class DafkaConsumer extends SimpleActor
     @Override
     public List<Socket> createSockets(ZContext ctx, Object... args)
     {
-        this.beaconActor = new ZActor(ctx, this.beacon, null, Arrays.asList("TEST").toArray());
+        Properties properties = (Properties) args[0];
+        if (StringUtils.equals(properties.getProperty("consumer.offset.reset"), "earliest")) {
+            this.resetLatest = false;
+        }
+
+        this.beaconActor = new ZActor(ctx, this.beacon, null, args);
         this.beaconActor.recv(); // Wait for signal that beacon is connected to tower
 
         consumerSub = ctx.createSocket(SocketType.SUB);
@@ -292,17 +308,53 @@ public class DafkaConsumer extends SimpleActor
         actor.send("$TERM");
     }
 
-    public static void main(String[] args) throws InterruptedException
+    public static void main(String[] args) throws InterruptedException, ParseException
     {
+        Properties consumerProperties = new Properties();
+        Options options = new Options();
+        options.addOption("from_beginning", "Consume messages from beginning of partition");
+        options.addOption("pub", true, "Beacon publisher address");
+        options.addOption("sub", true, "Beacon subscriber address");
+        options.addOption("verbose", "Enable verbose logging");
+        options.addOption("help", "Displays this help");
+        CommandLineParser parser = new DefaultParser();
+        try {
+            final CommandLine cmd = parser.parse(options, args);
+
+            if (cmd.hasOption("help")) {
+                HelpFormatter formatter = new HelpFormatter();
+                formatter.printHelp("dafka_console_consumer", options);
+                return;
+            }
+
+            if (cmd.hasOption("verbose")) {
+                Configurator.setRootLevel(Level.DEBUG);
+            }
+            else {
+                Configurator.setRootLevel(Level.ERROR);
+            }
+
+            if (cmd.hasOption("from_beginning")) {
+                consumerProperties.setProperty("consumer.offset.reset", "earliest");
+            }
+            if (cmd.hasOption("pub")) {
+                consumerProperties.setProperty("beacon.pub_address", cmd.getOptionValue("pub"));
+            }
+            if (cmd.hasOption("sub")) {
+                consumerProperties.setProperty("beacon.sub_address", cmd.getOptionValue("sub"));
+            }
+        }
+        catch (UnrecognizedOptionException exception) {
+            System.out.println(exception.getMessage());
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp("dafka_console_consumer", options);
+            return;
+        }
+
         ZContext context = new ZContext();
-        final Socket producerPub = context.createSocket(SocketType.PUB);
-        final Socket producerSub = context.createSocket(SocketType.SUB);
-        producerPub.bind("tcp://localhost:8885");
-        producerSub.connect("tcp://localhost:8886");
-        producerSub.subscribe("FPUBLISHER1");
 
         final DafkaConsumer dafkaConsumer = new DafkaConsumer();
-        ZActor actor = new ZActor(context, dafkaConsumer, null, Arrays.asList("TEST").toArray());
+        ZActor actor = new ZActor(context, dafkaConsumer, null, Arrays.asList(consumerProperties).toArray());
         Socket pipe = actor.pipe();
         byte[] signal = pipe.recv();
         assert signal[0] == 0;
@@ -311,32 +363,16 @@ public class DafkaConsumer extends SimpleActor
         dafkaConsumer.subscribe("HELLO");
         Thread.sleep(1000);
 
-        /*
-        DafkaProto pubMsg = new DafkaProto(DafkaProto.MSG);
-        pubMsg.setTopic("HELLO");
-        pubMsg.setSubject("HELLO");
-        pubMsg.setAddress("PUBLISHER1");
-        pubMsg.setSequence(1);
-        pubMsg.setContent(new ZFrame("CRUEL!"));
-        pubMsg.send(producerPub);
+        while (!context.isClosed()) {
+            ZMsg msg = actor.recv();
+            String subject = msg.popString();
+            String address = msg.popString();
+            String content = msg.popString();
 
-        DafkaProto headMsg = DafkaProto.recv(producerSub);
-        headMsg.dump();
-
-        pubMsg.setTopic("HELLO");
-        pubMsg.setSubject("HELLO");
-        pubMsg.setAddress("PUBLISHER1");
-        pubMsg.setSequence(0);
-        pubMsg.setContent(new ZFrame("CRUEL!"));
-        pubMsg.send(producerPub);
-
-        String msg = pipe.recvStr();
-        assert "HELLO".equals(msg);
-        msg = pipe.recvStr();
-        assert ("PUBLISHER1".equals(msg));
-        msg = pipe.recvStr();
-        assert ("CRUEL!".equals(msg));
-        */
+            System.out.println(subject);
+            System.out.println(address);
+            System.out.println(content);
+        }
 
         boolean rc = actor.sign();
         assert (rc);
