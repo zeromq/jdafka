@@ -32,6 +32,9 @@ import java.util.UUID;
 
 import static org.zeromq.ZActor.SimpleActor;
 
+/**
+ * TODO: Send EARLIEST message when connecting to store
+ */
 public class DafkaConsumer extends SimpleActor
 {
 
@@ -359,6 +362,9 @@ public class DafkaConsumer extends SimpleActor
         Socket pipe = actor.pipe();
         byte[] signal = pipe.recv();
         assert signal[0] == 0;
+
+        // Give time until connected to pubs and stores
+        Thread.sleep(1000);
         dafkaConsumer.subscribe("HELLO");
 
         final Thread zmqThread = new Thread(() -> {
