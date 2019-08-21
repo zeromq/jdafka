@@ -272,13 +272,15 @@ public class DafkaProto implements java.lang.AutoCloseable
                 byte isSubscribe = self.getNumber1 ();
                 self.isSubscribe = isSubscribe == 1;
                 self.id = (char) self.getNumber1 ();
-                final StringBuilder topicBuilder = new StringBuilder();
-                char next = (char) self.needle.get();
-                while (self.needle.hasRemaining()) {
-                    topicBuilder.append(next);
-                    next = (char) self.needle.get();
+                if (self.needle.hasRemaining()) {
+                    final StringBuilder topicBuilder = new StringBuilder();
+                    char next = (char) self.needle.get();
+                    while (self.needle.hasRemaining()) {
+                        topicBuilder.append(next);
+                        next = (char) self.needle.get();
+                    }
+                    self.topic = topicBuilder.toString();
                 }
-                self.topic = topicBuilder.toString();
                 return self;
             }
 
@@ -1361,7 +1363,7 @@ public class DafkaProto implements java.lang.AutoCloseable
     //  --------------------------------------------------------------------------
     //  Iterate through the subjects field, and append a subjects value
 
-    public List<String> subjects()
+    public List <String> subjects ()
     {
         return subjects;
     }
@@ -1373,7 +1375,7 @@ public class DafkaProto implements java.lang.AutoCloseable
         String string = String.format (format, args);
         //  Attach string to list
         if (subjects == null)
-            subjects = new ArrayList<String>();
+            subjects = new ArrayList <String> ();
         subjects.add (string);
     }
 
