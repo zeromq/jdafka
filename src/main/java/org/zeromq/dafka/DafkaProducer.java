@@ -113,8 +113,8 @@ public class DafkaProducer extends SimpleActor
         DafkaProto.subscribe(producerSub, DafkaProto.FETCH, producerAddress);
 
         rc = poller.register(producerSub, ZPoller.IN);
-        pipe.send(new byte[] { 0 });
         assert rc == true;
+        pipe.send(new byte[] { 0 });
         log.info("Producer started...");
     }
 
