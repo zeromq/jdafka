@@ -121,16 +121,16 @@ public class DafkaProducer extends SimpleActor
     @Override
     public boolean finished(Socket pipe)
     {
+        beacon.terminate(beaconActor);
         timerThreadRunning = false;
         synchronized (timerThread) {
             try {
-                timerThread.wait();
+                timerThread.join();
             }
             catch (InterruptedException exception) {
                 log.error("Failed to stop timer thread", exception);
             }
         }
-        beacon.terminate(beaconActor);
         log.info("Producer stopped!");
         return super.finished(pipe);
     }
@@ -320,20 +320,18 @@ public class DafkaProducer extends SimpleActor
                     throw new RuntimeException(e);
                 }
             }
-
-            System.out.println("KILL ME!!");
-            dafkaProducer.terminate(actor);
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Interrupted! Killing dafka console producer.");
+            System.out.println("Interrupted! Stopping dafka_console_producer.");
+            dafkaProducer.terminate(actor);
+            context.close();
             try {
                 zmqThread.interrupt();
                 zmqThread.join();
             }
             catch (InterruptedException e) {
             }
-            //context.close();
         }));
 
         zmqThread.start();

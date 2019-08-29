@@ -382,13 +382,11 @@ public class DafkaConsumer extends SimpleActor
             }
 
             System.out.println("KILL ME!!");
-            boolean rc = actor.sign();
-            assert (rc);
-            dafkaConsumer.terminate(actor);
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Interrupted! Killing dafka console consumer.");
+            System.out.println("Interrupted! Stopping dafka_console_consumer.");
+            dafkaConsumer.terminate(actor);
             context.close();
             try {
                 zmqThread.interrupt();
